@@ -1,0 +1,7 @@
+src/**
+out/test/**
+**/*.map
+tsconfig.json
+.gitattributes
+.gitignore
+DEVELOPMENT.md
