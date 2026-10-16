@@ -1,7 +1,12 @@
 {
   "name": "kloudhub-vscode",
   "displayName": "KloudHub",
-  "description": "KloudHub 계정으로 로그인해 내 환경과 서버를 보고 Remote-SSH 로 바로 접속한다.",
+  "description": "KloudHub 의 내 서버를 VS Code 에서 보고, 클릭 한 번으로 SSH 접속합니다.",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#2563EB",
+    "theme": "dark"
+  },
   "version": "0.1.2",
   "publisher": "kloudhub",
   "private": true,
@@ -58,7 +63,7 @@
     "viewsWelcome": [
       {
         "view": "kloudhub.servers",
-        "contents": "KloudHub 웹 설정에서 발급한 API 토큰으로 로그인하면 내 환경과 서버가 여기에 나온다.\n[로그인](command:kloudhub.login)\nRemote - SSH 확장이 설치되어 있으면 서버를 VS Code 창으로 바로 연다.",
+        "contents": "로그인하면 내 환경과 서버가 여기에 나온다.\n[KloudHub 로그인](command:kloudhub.login)\nAPI 토큰은 KloudHub 웹 → 설정 → API 토큰에서 발급한다.",
         "when": "!kloudhub.loggedIn"
       }
     ],
@@ -68,6 +73,12 @@
         "title": "로그인",
         "category": "KloudHub",
         "icon": "$(sign-in)"
+      },
+      {
+        "command": "kloudhub.account",
+        "title": "계정",
+        "category": "KloudHub",
+        "icon": "$(account)"
       },
       {
         "command": "kloudhub.logout",
@@ -269,6 +280,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "kloudhub.account",
+          "when": "kloudhub.loggedIn"
+        },
         {
           "command": "kloudhub.logout",
           "when": "kloudhub.loggedIn"

@@ -5,3 +5,4 @@ tsconfig.json
 .gitattributes
 .gitignore
 DEVELOPMENT.md
+media/icon.svg
