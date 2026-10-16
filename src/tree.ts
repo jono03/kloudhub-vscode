@@ -55,30 +55,23 @@ export class ServerItem extends vscode.TreeItem {
     const tip = new vscode.MarkdownString(undefined, true);
     tip.isTrusted = false;
     const stateText = SERVER_STATE_LABEL[(s.res.state ?? "").toUpperCase()] ?? s.res.state ?? "알 수 없음";
-    tip.appendMarkdown(`**${md(s.label)}** \`${md(stateText)}\`\n\n`);
+    tip.appendMarkdown(`**${md(s.label)}** · ${md(stateText)}\n\n`);
     const rows: [string, string | undefined][] = [
-      ["이름", s.res.name],
-      ["환경", s.envName ?? "(단독 인스턴스)"],
-      ["역할", s.roleLabel],
-      ["공인 IP", s.publicIp],
-      ["사설 IP", s.privateIp],
-      ["로그인 계정", s.user ?? "(모름 — 처음 접속할 때 묻는다)"],
-      ["존", s.res.backend_id],
-      ["설명", typeof s.res.spec.description === "string" ? s.res.spec.description : undefined],
+      ["접속", s.route.kind === "none" ? "불가" : s.route.kind === "jump" ? `${s.route.via!.label} 경유` : s.route.host],
+      ["계정", s.user],
+      ["환경", s.envName],
     ];
-    for (const [k, v] of rows) if (v) tip.appendMarkdown(`- ${k}: ${md(String(v))}\n`);
-    tip.appendMarkdown(`\n**SSH 경로**: ${md(s.route.kind === "none" ? noRouteReason(s) : s.route.label)}\n`);
-    const keys = s.res.spec.keys;
-    if (s.keys === "missing") {
-      tip.appendMarkdown(
-        `\n**🔒 이 PC 의 SSH 키가 서버에 없다.** 서버에는 만들 때 등록돼 있던 키만 들어간다` +
-          `${Array.isArray(keys) && keys.length ? ` (${md(keys.map((k) => k.name || k.fingerprint || "").join(", "))})` : ""}` +
-          `. 그 키를 이 PC 에 두거나 \`identityFile\` 설정으로 지정할 것.\n`
-      );
+    for (const [k, v] of rows) if (v) tip.appendMarkdown(`${k}: ${md(String(v))}  \n`);
+    const desc = typeof s.res.spec.description === "string" ? s.res.spec.description.trim() : "";
+    if (desc) tip.appendMarkdown(`\n${md(desc)}\n`);
+    // 문제가 있을 때만 한 줄 덧붙인다
+    if (s.route.kind === "none") {
+      tip.appendMarkdown(`\n$(warning) ${md(noRouteReason(s))}\n`);
+    } else if (s.keys === "missing") {
+      tip.appendMarkdown(`\n$(warning) 이 PC 의 SSH 키가 서버에 없다. 접속이 거절될 수 있다.\n`);
     } else if (s.keys === "none") {
-      tip.appendMarkdown(`\n**🔒 만들 때 넣은 SSH 키가 없다.** KloudHub 에 키를 등록하기 전에 만든 서버다.\n`);
+      tip.appendMarkdown(`\n$(warning) 이 서버에는 SSH 키가 등록돼 있지 않다.\n`);
     }
-    if (s.passwordSsh) tip.appendMarkdown(`\nSSH 비밀번호 로그인이 켜져 있다.\n`);
     this.tooltip = tip;
   }
 }
@@ -103,15 +96,14 @@ export class EnvItem extends vscode.TreeItem {
     this.contextValue = `env.${e.state}${e.template === "k8s" ? ".k8s" : ""}`;
     const tip = new vscode.MarkdownString(undefined, true);
     tip.isTrusted = false;
-    tip.appendMarkdown(`**${md(e.name)}** \`${md(state)}\`\n\n`);
+    tip.appendMarkdown(`**${md(e.name)}** · ${md(state)}\n\n`);
     const rows: [string, string | undefined][] = [
-      ["템플릿", e.template ? `${node.info.title} (${e.template}${e.version ? ` v${e.version}` : ""})` : node.info.title],
-      ["존", e.zone],
-      ["서버", String(node.servers.length)],
-      ["설명", e.description ?? undefined],
-      ["진행 중", p ? `${p.kind} ${p.done}/${p.total}${p.step ? ` · ${p.step}` : ""}` : undefined],
+      ["종류", node.info.title],
+      ["서버", `${node.servers.length}대`],
+      ["진행", p && p.total ? `${p.done}/${p.total} 단계${p.step ? ` · ${p.step}` : ""}` : undefined],
     ];
-    for (const [k, v] of rows) if (v) tip.appendMarkdown(`- ${k}: ${md(v)}\n`);
+    for (const [k, v] of rows) if (v) tip.appendMarkdown(`${k}: ${md(v)}  \n`);
+    if (e.description) tip.appendMarkdown(`\n${md(e.description)}\n`);
     this.tooltip = tip;
   }
 }
@@ -126,7 +118,7 @@ export class ProjectItem extends vscode.TreeItem {
     if (empty && !node.error) this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
     this.iconPath = new vscode.ThemeIcon(node.error ? "warning" : "project");
     this.contextValue = "project";
-    this.tooltip = `${node.project.code} (${node.project.role})${node.error ? `\n${node.error}` : ""}`;
+    this.tooltip = node.error ? `${node.project.code}\n${node.error}` : node.project.code;
   }
 }
 
@@ -157,9 +149,16 @@ export class KloudHubTreeProvider implements vscode.TreeDataProvider<vscode.Tree
   private projects: ProjectNode[] = [];
   private error: string | undefined;
   private loggedIn = false;
+  private account: string | undefined;
+
+  setAccount(label: string | undefined): void {
+    this.account = label;
+    this.emitter.fire();
+  }
 
   setLoggedOut(): void {
     this.loggedIn = false;
+    this.account = undefined;
     this.projects = [];
     this.error = undefined;
     this.emitter.fire();
@@ -193,6 +192,11 @@ export class KloudHubTreeProvider implements vscode.TreeDataProvider<vscode.Tree
     if (!this.loggedIn) return []; // 로그인 전에는 viewsWelcome 이 보인다
     if (!e) {
       const items: vscode.TreeItem[] = [];
+      if (this.account) {
+        const a = new InfoItem(this.account, "account", { command: "kloudhub.account", title: "계정" });
+        a.tooltip = "누르면 로그아웃·웹 열기 메뉴가 나온다";
+        items.push(a);
+      }
       if (this.error) {
         items.push(new InfoItem(this.error, "error", { command: "kloudhub.refresh", title: "새로고침" }));
       }
