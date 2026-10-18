@@ -67,10 +67,14 @@ export class ServerItem extends vscode.TreeItem {
     // 문제가 있을 때만 한 줄 덧붙인다
     if (s.route.kind === "none") {
       tip.appendMarkdown(`\n$(warning) ${md(noRouteReason(s))}\n`);
-    } else if (s.keys === "missing") {
-      tip.appendMarkdown(`\n$(warning) 이 PC 의 SSH 키가 서버에 없다. 접속이 거절될 수 있다.\n`);
-    } else if (s.keys === "none") {
-      tip.appendMarkdown(`\n$(warning) 이 서버에는 SSH 키가 등록돼 있지 않다.\n`);
+    } else if (blocked) {
+      tip.appendMarkdown(
+        s.keys === "missing"
+          ? `\n$(warning) 이 PC 의 SSH 키가 서버에 없다. 접속이 거절될 수 있다.\n`
+          : `\n$(warning) 이 서버에는 SSH 키가 등록돼 있지 않다.\n`
+      );
+    } else if (s.passwordSsh && (s.keys === "missing" || s.keys === "none")) {
+      tip.appendMarkdown(`\nSSH 비밀번호로 접속할 수 있다.\n`);
     }
     this.tooltip = tip;
   }
@@ -115,7 +119,7 @@ export class ProjectItem extends vscode.TreeItem {
     const empty = !node.envs.length && !node.standalone.length;
     const code = node.project.name && node.project.name !== node.project.code ? node.project.code : undefined;
     this.description = node.error ? "불러오기 실패" : [code, empty ? "환경 없음" : undefined].filter(Boolean).join(" · ");
-    if (empty && !node.error) this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+    if (empty && !node.error) this.collapsibleState = vscode.TreeItemCollapsibleState.None;
     this.iconPath = new vscode.ThemeIcon(node.error ? "warning" : "project");
     this.contextValue = "project";
     this.tooltip = node.error ? `${node.project.code}\n${node.error}` : node.project.code;
@@ -209,7 +213,6 @@ export class KloudHubTreeProvider implements vscode.TreeDataProvider<vscode.Tree
       if (n.error) return [new InfoItem(n.error, "error", { command: "kloudhub.refresh", title: "새로고침" })];
       const items: vscode.TreeItem[] = n.envs.map((env) => new EnvItem(env));
       if (n.standalone.length) items.push(new StandaloneGroupItem(n));
-      if (!items.length) items.push(new InfoItem("내 환경·인스턴스가 없다", "info"));
       return items;
     }
     if (e instanceof EnvItem) {
