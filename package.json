@@ -4,7 +4,7 @@
   "description": "KloudHub 의 내 서버를 VS Code 에서 보고, 클릭 한 번으로 SSH 접속합니다.",
   "icon": "media/icon.png",
   "galleryBanner": {
-    "color": "#2563EB",
+    "color": "#1B232C",
     "theme": "dark"
   },
   "version": "0.1.2",
