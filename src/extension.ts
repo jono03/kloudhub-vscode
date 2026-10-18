@@ -59,7 +59,7 @@ async function setClient(c: Credentials | undefined): Promise<void> {
 /** API 호출 공통 처리: 401 이면 토큰을 버리고 다시 로그인을 권한다. */
 async function withClient<T>(fn: (c: KloudHubClient) => Promise<T>): Promise<T | undefined> {
   if (!client) {
-    const pick = await vscode.window.showWarningMessage("KloudHub 에 로그인되어 있지 않다.", "로그인");
+    const pick = await vscode.window.showWarningMessage("로그인이 필요하다.", "로그인");
     if (pick) await vscode.commands.executeCommand("kloudhub.login");
     return undefined;
   }
@@ -71,7 +71,7 @@ async function withClient<T>(fn: (c: KloudHubClient) => Promise<T>): Promise<T |
       await auth.clear();
       await setClient(undefined);
       const pick = await vscode.window.showErrorMessage(
-        "KloudHub API 토큰이 만료됐거나 올바르지 않다. 웹 설정에서 새 토큰을 발급해 다시 로그인할 것.",
+        "로그인이 만료됐다. 웹 설정에서 새 API 토큰을 발급받아 다시 로그인해 주세요.",
         "다시 로그인"
       );
       if (pick) await vscode.commands.executeCommand("kloudhub.login");
@@ -118,6 +118,7 @@ async function refresh(): Promise<void> {
     });
     if (!projects) return;
     tree.setData(projects);
+    if (me && client) tree.setAccount(`${me.username} · ${new URL(webBase(client.credentials.endpoint)).host}`);
     // 한 프로젝트라도 실패했으면 지운 서버를 가려낼 수 없으므로 정리하지 않는다.
     if (projects.every((p) => !p.error)) await pruneSshConfig(new Set(tree.getServers().map((s) => s.res.id)));
   } catch (e: any) {
@@ -321,7 +322,7 @@ async function confirmKeys(s: ServerNode): Promise<boolean> {
       ? "이 PC 의 SSH 공개키가 서버에 들어 있지 않다. 서버에는 만들 때 KloudHub 에 등록돼 있던 키만 들어간다."
       : "이 서버에는 만들 때 넣은 SSH 키가 없다(키를 등록하기 전에 만든 서버).";
   const pick = await vscode.window.showWarningMessage(
-    `${s.label}: ${why} 그 키가 ssh-agent 에 있지 않다면 접속이 거절된다.`,
+    `${s.label}: ${why} 그 키가 이 PC 에 없다면 접속이 거절된다.`,
     { modal: true },
     "그래도 접속"
   );
@@ -388,13 +389,13 @@ async function connect(arg: unknown, newWindow: boolean): Promise<void> {
   const remoteExt = findRemoteSshExtension();
   if (!remoteExt) {
     const pick = await vscode.window.showWarningMessage(
-      "Remote - SSH 확장이 없다. 설치하면 서버 안의 파일을 VS Code 창으로 바로 연다.",
+      "Remote - SSH 확장이 필요하다. 설치하면 서버를 VS Code 창으로 바로 열 수 있다.",
       "Remote - SSH 설치",
       "SSH 터미널로 열기"
     );
     if (pick === "Remote - SSH 설치") {
       await vscode.commands.executeCommand("workbench.extensions.installExtension", "ms-vscode-remote.remote-ssh");
-      vscode.window.showInformationMessage("설치가 끝나면 다시 접속을 누를 것.");
+      vscode.window.showInformationMessage("설치가 끝나면 접속을 다시 눌러 주세요.");
     } else if (pick === "SSH 터미널로 열기") {
       await openTerminal(arg);
     }
@@ -543,6 +544,21 @@ async function login(): Promise<void> {
   }
 }
 
+async function accountMenu(): Promise<void> {
+  if (!client) return;
+  const pick = await vscode.window.showQuickPick(
+    [
+      { label: "$(globe) KloudHub 웹 열기", id: "web" },
+      { label: "$(sign-in) 다른 계정으로 로그인", id: "relogin" },
+      { label: "$(sign-out) 로그아웃", id: "logout" },
+    ],
+    { title: `${me?.username ?? "KloudHub"} · ${webBase(client.credentials.endpoint)}` }
+  );
+  if (pick?.id === "web") await openInBrowser("/");
+  else if (pick?.id === "relogin") await login();
+  else if (pick?.id === "logout") await logout();
+}
+
 async function logout(): Promise<void> {
   await auth.clear();
   await setClient(undefined);
@@ -562,6 +578,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     view,
     reg("kloudhub.login", login),
     reg("kloudhub.logout", logout),
+    reg("kloudhub.account", accountMenu),
     reg("kloudhub.refresh", refresh),
     reg("kloudhub.connect", (a) => connect(a, true)),
     reg("kloudhub.connectCurrentWindow", (a) => connect(a, false)),

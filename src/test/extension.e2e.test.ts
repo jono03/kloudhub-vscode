@@ -95,7 +95,9 @@ test("로그인: 웹 주소 → 토큰, 토큰은 SecretStorage 에만", async (
 });
 
 test("트리(시안 A): 프로젝트 → 내 환경 → 서버, 설명은 접속할 곳 하나만", () => {
-  assert.deepEqual(outline(), [
+  const [account, ...rest] = outline();
+  assert.match(account, /^me · 127\.0\.0\.1:\d+$/, "맨 위에 로그인 계정 줄");
+  assert.deepEqual(rest, [
     "연구실 [lab]",
     "  dev [개발 VM · 정지됨]",
     "    vm0 [203.0.113.7 · 정지됨]",
@@ -202,6 +204,6 @@ test("토큰이 만료되면 로그아웃하고 다시 로그인을 권한다", 
   await fake.commands.executeCommand("kloudhub.refresh");
   assert.equal(fake.recorded.contexts["kloudhub.loggedIn"], false);
   assert.equal(ctx._secrets.get("kloudhub.credentials"), undefined);
-  assert.ok(fake.recorded.messages.some((m) => m.level === "error" && /토큰이 만료/.test(m.text)));
+  assert.ok(fake.recorded.messages.some((m) => m.level === "error" && /로그인이 만료/.test(m.text)));
   for (const [k, v] of saved) ctx._secrets.set(k, v);
 });
